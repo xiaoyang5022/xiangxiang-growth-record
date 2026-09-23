@@ -1,0 +1,19 @@
+{
+  "name": "相相成长记录",
+  "short_name": "相相成长",
+  "description": "早餐连胜与成长激励小记录",
+  "lang": "zh-CN",
+  "start_url": "./?pwa=2",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fbf7ef",
+  "theme_color": "#fbf7ef",
+  "icons": [
+    {
+      "src": "xiangxiang-rabbit-v2.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
