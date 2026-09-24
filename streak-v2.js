@@ -32,7 +32,17 @@ rebuildStreakAndAwards=function(){
   S.records.push(...generated);S.awards=generated.map(r=>r.milestoneKey);refreshBreak();
 };
 function isoOffset(date,days){let x=new Date(date+'T12:00');x.setDate(x.getDate()+days);return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0')}
-function reviveOpportunity(){let target=isoOffset(D(),-1),days=new Set(streakDates());if(days.has(target))return null;let prior=isoOffset(target,-1);if(!days.has(prior))return null;let run=0,cursor=prior;while(days.has(cursor)){run++;cursor=isoOffset(cursor,-1)}return {date:target,run}}
+function reviveOpportunity(){
+  let days=new Set(streakDates());
+  for(const offset of [1,2]){
+    let target=isoOffset(D(),-offset);if(days.has(target))continue;
+    let prior=isoOffset(target,-1),after=isoOffset(target,1);
+    if(!days.has(prior)||(offset===2&&!days.has(after)))continue;
+    let run=0,cursor=prior;while(days.has(cursor)){run++;cursor=isoOffset(cursor,-1)}
+    return {date:target,run,offset,lastDay:offset===2};
+  }
+  return null;
+}
 function rewardAt(day){return (day%7===0?1:0)+(day%30===0?2:0)+(RECORD_REWARDS.get(day)||0)}
 function nextReward(cur){for(let d=cur+1;d<=3650;d++)if(rewardAt(d))return {day:d,jade:rewardAt(d)};return null}
 const baseRenderDash=renderDash;
@@ -42,7 +52,7 @@ renderDash=function(){
   if(stats[3])stats[3].innerHTML='<span class="muted">持有复活卡</span><b>'+S.revive.owned+' 张</b><small class="muted">累计使用 '+S.revive.count+' 次</small>';
   const oldNotice=dashboard.querySelector('.notice');if(oldNotice)oldNotice.remove();
   const chance=reviveOpportunity(),progress=dashboard.querySelector('.progress');
-  if(chance&&progress){let html=S.revive.owned?`漏打了 ${chance.date} 的早餐，可消耗 1 张复活卡保护此前 ${chance.run} 天连胜。 <button class="secondary tiny" onclick="revive()">立即使用</button>`:`漏打了 ${chance.date} 的早餐。还可补救最近这 1 天，但目前没有复活卡。 <button class="secondary tiny" onclick="go('shop');setTimeout(()=>shopList('coin'),0)">去商店购买</button>`;progress.insertAdjacentHTML('afterend','<div class="notice revive-notice" style="margin-top:12px">'+html+'</div>')}
+  if(chance&&progress){let timing=chance.lastDay?'今天是补救的最后期限。':'今天或明天都可以补救。';let html=S.revive.owned?`漏打了 ${chance.date} 的早餐，${timing}可消耗 1 张复活卡保护此前 ${chance.run} 天连胜。 <button class="secondary tiny" onclick="revive()">立即使用</button>`:`漏打了 ${chance.date} 的早餐，${timing} <button class="secondary tiny" onclick="buyAndRevive()">${REVIVE_PRICE} 币购买并立即使用</button>`;progress.insertAdjacentHTML('afterend','<div class="notice revive-notice" style="margin-top:12px">'+html+'</div>')}
   const milestones=dashboard.querySelector('.milestones'),next=nextReward(S.streak.cur);
   if(milestones)milestones.insertAdjacentHTML('afterend',`<div class="card reward-guide"><div class="row"><b class="grow">下一份连胜奖励</b><span class="badge">${next.day} 天 · +${next.jade} 玉</span></div><div class="reward-rules"><span>每满 7 天 <b>+1 玉</b></span><span>每满 30 天 <b>额外 +2 玉</b></span></div><details><summary>查看破纪录奖励</summary><div class="reward-list">${[...RECORD_REWARDS].map(([d,j])=>`<span class="${S.awards.includes('record-'+d)?'done':''}">${d} 天<br><b>+${j} 玉</b></span>`).join('')}</div><p class="muted">同一天如果也达到 7 天或 30 天周期奖励，会自动叠加发放。</p></details></div>`);
 };
@@ -74,6 +84,13 @@ revive=function(){
   let chance=reviveOpportunity();if(!chance)return alert('目前没有可以复活的最近漏签。复活卡只能补救最近漏掉的 1 天。');
   if(S.revive.owned<1)return alert('还没有复活卡，请先到商店购买。');
   if(!confirm('消耗 1 张复活卡，保护 '+chance.date+' 并延续此前 '+chance.run+' 天连胜？'))return;
-  S.revive.protectedDates.push(chance.date);S.revive.protectedDates=[...new Set(S.revive.protectedDates)].sort();S.revive.owned--;S.revive.count++;rebuildStreakAndAwards();save();
+  applyRevive(chance,true);
 };
+function applyRevive(chance,useInventory){S.revive.protectedDates.push(chance.date);S.revive.protectedDates=[...new Set(S.revive.protectedDates)].sort();if(useInventory)S.revive.owned--;S.revive.count++;rebuildStreakAndAwards();save()}
+function buyAndRevive(){
+  let chance=reviveOpportunity();if(!chance)return alert('这次漏签已经超过两天补救期，或存在连续两天漏签。');
+  if(balance().coin<REVIVE_PRICE)return alert('还差 '+(REVIVE_PRICE-balance().coin)+' 相相币');
+  if(!confirm('花费 '+REVIVE_PRICE+' 相相币购买并立即使用复活卡，保护 '+chance.date+' 的连胜？'))return;
+  S.redeems.push({id:uid(),date:D(),itemName:'购买并使用：连胜复活卡',cur:'coin',price:REVIVE_PRICE,createdAt:Date.now()});applyRevive(chance,false);
+}
 document.head.insertAdjacentHTML('beforeend',`<style>.stat small{display:block;margin-top:2px}.reward-guide{margin-top:10px}.reward-rules{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.reward-rules span{padding:8px 10px;border-radius:11px;background:#f8eee9;color:#806b61}.reward-guide details{border-top:1px solid var(--line);padding-top:10px}.reward-list{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:10px}.reward-list span{text-align:center;padding:8px 3px;border:1px dashed #ddc9bc;border-radius:11px;color:var(--muted);font-size:12px}.reward-list span.done{background:#f4dfe3;color:#9e536a;border-style:solid}.k-revive{background:#9c82b8!important}.revive-icon{width:34px;height:34px;display:grid;place-items:center;border-radius:12px;background:#efe8f7;color:#80659f;font-size:20px}.revive-product button:disabled{opacity:.55;cursor:default}@media(max-width:430px){.reward-list{grid-template-columns:repeat(3,1fr)}}</style>`);
