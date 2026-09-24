@@ -91,16 +91,31 @@ function setWeeklyTarget(value){let next=Math.max(2,Math.min(5,+value||GROWTH_DE
 recordForm=function(id){let a=S.activities.find(x=>x.id===id);open(`<h2>${a?esc(a.name):'自定义奖励'}</h2><p class="muted">记录一次值得鼓励的小事；当天有正向记录，就会计入本周活跃。</p><label>日期</label><input id="fdate" type="date" value="${D()}"><label>获得相相币</label><input id="fcoin" type="number" value="${a?.coin||0}"><label>额外相相玉</label><input id="fjade" type="number" value="0"><label>备注</label><textarea id="fnote" placeholder="例如：分享了可爱的照片"></textarea><div class="actions" style="margin-top:16px"><button class="primary" onclick="submitRecord('${id}')">记入账本</button><button class="outline" onclick="close()">取消</button></div>`)};
 delRecord=function(id){if(confirm('删除这条记录？余额与相关成长奖励会自动回溯核算。')){S.records=S.records.filter(r=>r.id!==id);rebuildStreakAndAwards();save()}};
 
-const growthBaseRenderReport=renderReport,growthBaseDrawReport=drawReport;
-renderReport=function(){growthBaseRenderReport();let title=report.querySelector('h2');if(title)title.textContent='成长回顾';report.querySelectorAll('button').forEach(b=>{if(b.textContent==='刷新战报')b.textContent='刷新回顾'})};
+const growthBaseDrawReport=drawReport;
+renderReport=function(){report.innerHTML=`<div class="card"><h2 style="margin-top:0">成长回顾</h2><label>选择日期</label><input id="reportDate" type="date" value="${D()}" onchange="drawReport()"><canvas id="canvas" width="640" height="860" class="report" style="margin-top:14px"></canvas><p class="report-help">手机端点击“保存 / 分享 PNG”，可在系统菜单中选择存储到照片、存储到文件或发送给好友。</p><div class="actions" style="margin-top:12px"><button class="primary" onclick="downloadReport()">保存 / 分享 PNG</button><button class="secondary" onclick="previewReport()">图片预览</button><button class="outline" onclick="drawReport()">刷新回顾</button></div></div>`;setTimeout(drawReport,0)};
 drawReport=function(){
   growthBaseDrawReport();let c=document.getElementById('canvas');if(!c)return;let d=document.getElementById('reportDate').value,ctx=c.getContext('2d'),week=growthWeekInfo(d),x=420;
   ctx.fillStyle='#fff7e9';ctx.strokeStyle='#e5d6cc';ctx.lineWidth=1.5;ctx.beginPath();ctx.roundRect(x,298,176,116,20);ctx.fill();ctx.stroke();ctx.fillStyle='#8b7368';ctx.font='18px "PingFang SC",sans-serif';ctx.fillText('本周活跃',x+18,332);ctx.fillStyle='#a77458';ctx.font='700 30px Georgia,"PingFang SC",serif';ctx.fillText(week.days.length+'/'+S.growth.target+' 天',x+18,381);
 };
-downloadReport=function(){let a=document.createElement('a');a.href=canvas.toDataURL('image/png');a.download='相相成长回顾-'+reportDate.value+'.png';a.click()};
+function reportPngFile(){
+  let c=document.getElementById('canvas'),name='相相成长回顾-'+document.getElementById('reportDate').value+'.png',data=c.toDataURL('image/png'),raw=atob(data.split(',')[1]),bytes=new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
+  return new File([bytes],name,{type:'image/png',lastModified:Date.now()});
+}
+downloadReport=async function(){
+  let file;try{file=reportPngFile()}catch{return alert('图片生成失败，请先刷新回顾后重试。')}
+  if(navigator.share&&navigator.canShare?.({files:[file]})){
+    try{await navigator.share({title:'相相成长回顾',text:'今天的成长小手账 ♡',files:[file]});return}catch(error){if(error?.name==='AbortError')return}
+  }
+  try{const url=URL.createObjectURL(file),a=document.createElement('a');a.href=url;a.download=file.name;a.rel='noopener';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000)}catch{alert('未能直接保存，请使用“图片预览”后长按图片保存。')}
+};
+function previewReport(){
+  let c=document.getElementById('canvas');if(!c)return;
+  let src=c.toDataURL('image/png');open(`<h2>图片预览</h2><p class="muted">在手机上长按图片，可选择“存储到照片”；也可以返回后使用系统分享菜单。</p><img class="report-preview" src="${src}" alt="相相成长回顾 PNG 预览"><div class="actions" style="margin-top:14px"><button class="primary" onclick="downloadReport()">保存 / 分享 PNG</button><button class="outline" onclick="close()">返回</button></div>`);
+}
 
 const reportNav=document.querySelector('[data-page="report"]');if(reportNav)reportNav.innerHTML='<span class="icon">▣</span>回顾';
-document.head.insertAdjacentHTML('beforeend',`<style>.gentle-note{margin-top:12px;padding:11px 13px;border-radius:14px;background:#fff8ec;border:1px dashed #e5cfaf;color:#866f56;font-size:13px}.growth-categories{display:grid;gap:15px}.growth-category .progress{margin:7px 0 5px}.growth-category small{display:block}.cal-day i{font-size:10px}.settings select{background:#fffdf9}@media(max-width:430px){.gentle-note{font-size:12px}.grid .stat{padding:13px 11px}.grid .stat b{font-size:22px}}</style>`);
+document.head.insertAdjacentHTML('beforeend',`<style>.gentle-note{margin-top:12px;padding:11px 13px;border-radius:14px;background:#fff8ec;border:1px dashed #e5cfaf;color:#866f56;font-size:13px}.growth-categories{display:grid;gap:15px}.growth-category .progress{margin:7px 0 5px}.growth-category small{display:block}.cal-day i{font-size:10px}.settings select{background:#fffdf9}.report-help{margin:11px 2px 0;color:var(--muted);font-size:13px}.report-preview{display:block;width:100%;border-radius:18px;border:1px solid var(--line);box-shadow:0 8px 18px #72544712}@media(max-width:430px){.gentle-note{font-size:12px}.grid .stat{padding:13px 11px}.grid .stat b{font-size:22px}.report-help{font-size:12px}}</style>`);
 
 const growthBaseSafetyBoot=safetyBoot;
 safetyBoot=function(){growthMigrationChanged=false;growthBaseSafetyBoot();if(growthMigrationChanged&&!storageFault){try{save()}catch{}}};
